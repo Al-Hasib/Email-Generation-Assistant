@@ -1,0 +1,10 @@
+services:
+  email-evaluation:
+    build:
+      context: .
+      target: evaluation
+    container_name: email-gen-eval
+    env_file:
+      - .env
+    volumes:
+      - ./results:/app/results
