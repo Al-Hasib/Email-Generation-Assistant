@@ -11,6 +11,7 @@ from typing import List
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from langchain_core.language_models import BaseChatModel
 from langchain_groq import ChatGroq
 
 from models.base import EmailInput, EmailResult

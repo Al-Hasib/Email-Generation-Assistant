@@ -9,6 +9,7 @@ Designed to maximise quality through iterative self-improvement.
 from typing import Literal
 
 from langgraph.graph import StateGraph, START, END
+from langgraph.types import Command
 from langchain_groq import ChatGroq
 
 from .base import BaseModel, EmailInput, GraphState
@@ -39,14 +40,17 @@ def _build_graph(llm: ChatGroq) -> StateGraph:
         })
         return {"email": r.content}
 
-    def review_node(state: GraphState) -> dict:
+    def review_node(state: GraphState) -> Command[Literal["rewrite", "__end__"]]:
         chain = SELF_REFLECT_REVIEWER_PROMPT | llm
         r = chain.invoke({
             "email": state["email"],
             "facts_bullets": state["facts_bullets"],
             "tone": state["tone"],
         })
-        return {"feedback": r.content}
+        feedback = r.content
+        if feedback.strip().upper().startswith("ACCEPT") or state.get("rewrite_count", 0) >= 2:
+            return Command(goto=END, update={"feedback": feedback})
+        return Command(goto="rewrite", update={"feedback": feedback})
 
     def rewrite_node(state: GraphState) -> dict:
         chain = rewriter_prompt | llm
@@ -58,15 +62,7 @@ def _build_graph(llm: ChatGroq) -> StateGraph:
             "facts_bullets": state["facts_bullets"],
             "tone": state["tone"],
         })
-        return {"email": r.content, "rewrite_count": state.get("rewrite_count", 0) + 1}
-
-    def review_router(state: GraphState) -> Literal["rewrite", "end"]:
-        fb = state.get("feedback", "").strip().upper()
-        if fb.startswith("ACCEPT"):
-            return "end"
-        if state.get("rewrite_count", 0) < 2:
-            return "rewrite"
-        return "end"
+        return {"email": r.content, "rewrite_count": 1}
 
     builder = StateGraph(GraphState)
     builder.add_node("plan", plan_node)
@@ -77,10 +73,6 @@ def _build_graph(llm: ChatGroq) -> StateGraph:
     builder.add_edge(START, "plan")
     builder.add_edge("plan", "write")
     builder.add_edge("write", "review")
-    builder.add_conditional_edges("review", review_router, {
-        "rewrite": "rewrite",
-        "end": END,
-    })
     builder.add_edge("rewrite", "review")
 
     return builder.compile()

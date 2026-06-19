@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, TypedDict
+import operator
+from typing import Annotated, List, TypedDict
 
 
 @dataclass
@@ -25,7 +26,7 @@ class GraphState(TypedDict):
     tone: str
     plan: str
     email: str
-    rewrite_count: int
+    rewrite_count: Annotated[int, operator.add]
     feedback: str
 
 

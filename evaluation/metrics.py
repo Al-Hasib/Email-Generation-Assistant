@@ -27,10 +27,15 @@ Metric 3: Overall Quality Score (OQS)
 import re
 from typing import List, Tuple
 
-from langchain_core.language_models import BaseLanguageModel
+from langchain_core.language_models import BaseChatModel
+from pydantic import BaseModel, Field
 
 from src.prompt_templates import TONE_EVALUATION_PROMPT, QUALITY_EVALUATION_PROMPT
 from evaluation.test_scenarios import TestScenario
+
+
+class _JudgeScore(BaseModel):
+    score: int = Field(ge=1, le=5, description="Score from 1 (lowest) to 5 (highest)")
 
 STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -108,19 +113,14 @@ def metric_fact_recall_accuracy_detail(
 # =============================================================================
 
 
-def _llm_judge_score(prompt_template, llm: BaseLanguageModel, **kwargs) -> float:
-    chain = prompt_template | llm
-    result = chain.invoke(kwargs)
-    content = result.content.strip()
-    match = re.search(r'[1-5]', content)
-    if match:
-        score = int(match.group())
-        return (score - 1) / 4
-    return 0.5
+def _llm_judge_score(prompt_template, llm: BaseChatModel, **kwargs) -> float:
+    structured_llm = llm.with_structured_output(_JudgeScore)
+    result = (prompt_template | structured_llm).invoke(kwargs)
+    return (result.score - 1) / 4
 
 
 def metric_tone_adherence(
-    email: str, scenario: TestScenario, llm: BaseLanguageModel
+    email: str, scenario: TestScenario, llm: BaseChatModel
 ) -> float:
     return _llm_judge_score(
         TONE_EVALUATION_PROMPT, llm,
@@ -134,7 +134,7 @@ def metric_tone_adherence(
 
 
 def metric_overall_quality(
-    email: str, llm: BaseLanguageModel
+    email: str, llm: BaseChatModel
 ) -> float:
     return _llm_judge_score(
         QUALITY_EVALUATION_PROMPT, llm,
